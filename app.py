@@ -113,13 +113,21 @@ def process_command(command, database_info):
                 # Ensure there are at least two tables to join
                 if len(db) < 2:
                     print(f"Database: {db_name}\nNot enough tables to perform a JOIN.\n")
-                    continue
+                    cmd = 'where'  # Fallback to WHERE command
                 table_names = list(db.keys())
-                table1, table2 = random.sample(table_names, 2)
-                table1_info = db[table1]
-                table2_info = db[table2]
-                # Find common columns for join condition
-                common_columns = set(table1_info['columns'].keys()) & set(table2_info['columns'].keys())
+
+                common_columns = set()
+                try_count = 0
+                while not common_columns:
+                    table1, table2 = random.sample(table_names, 2)
+                    table1_info = db[table1]
+                    table2_info = db[table2]
+                    common_columns = set(table1_info['columns'].keys()) & set(table2_info['columns'].keys())
+                    try_count += 1
+                    if try_count > 5:
+                        print(f"Database: {db_name}\nCould not find common columns to join between '{table1}' and '{table2}'.\n")
+                        cmd = 'where'  # Fallback to WHERE command
+                        break
                 if not common_columns:
                     # If no common columns, use potential foreign key columns
                     possible_keys = set(table1_info['columns'].keys()) & set(['StudentID', 'CourseID', 'EnrollmentID'])
@@ -725,54 +733,57 @@ def upload_data_to_db(df, filename, database_type, database_info, sample_size=5)
     # Display the database_info structure
     st.write("Database structure saved:", database_info)
 
-import streamlit as st
-import pandas as pd
+##################################################################################################################################################################
+suggestions = [
+    "Find studentid, firstName, lastName of students with studentID equal to 1",
+    "Find 10 firstName, lastName of students",
+    "Calculate sum of credithours of courses by instructorname",
+    "Find firstName, lastName of students, enrollments with courseid is 101",
+    "Show 5 firstname, lastname of students, enrollments with grade greater than 3.0 sorted by lastName",
+    '\\explore',
+    '\\sample',
+    '\\groupby',
+    '\\join',
+    '\\where',
+    '\\orderby',
+    '\\limit',
+    '\\having'
+]
 
+# Streamlit App Interface
 st.title("Database Chat Query App")
 
 # Step 1: Select Database Type
 database_type = st.radio("Select Database Type:", ("MongoDB", "SQLite"))
 
-# Step 2: Upload CSV File
-uploaded_file = st.file_uploader("Upload a CSV file", type="csv")
-if uploaded_file is not None:
-    # Load CSV content into DataFrame
-    df = pd.read_csv(uploaded_file)
-    st.write("CSV Preview:", df.head())
+# Toggle to show/hide the upload section
+show_upload = st.checkbox("Show Upload Section", value=True)
 
-    # Upload CSV to selected database
-    filename = uploaded_file.name.split(".")[0]  # Use the file name without the extension as the table/collection name
-    if st.button("Upload Data to Database"):
-        upload_data_to_db(df, filename, database_type, database_info)
+# Step 2: Upload CSV File (conditionally displayed)
+if show_upload:
+    uploaded_file = st.file_uploader("Upload a CSV file", type="csv")
+    if uploaded_file is not None:
+        # Load CSV content into DataFrame
+        df = pd.read_csv(uploaded_file)
+        st.write("CSV Preview:", df.head())
 
-# Chat History
+        # Upload CSV to selected database
+        filename = uploaded_file.name.split(".")[0]  # Use the file name without the extension as the table/collection name
+        if st.button("Upload Data to Database"):
+            upload_data_to_db(df, filename, database_type, database_info)
+
+# Initialize or clear chat history
 if "chat_history" not in st.session_state:
     st.session_state["chat_history"] = []
 
-# Display Chat History
+# Chat Interface
 st.subheader("Chat with the Database")
 
-# Chat messages container
-chat_container = st.container()
-with chat_container:
-    for entry in st.session_state.chat_history:
-        role, content = entry["role"], entry["content"]
-        if role == "user":
-            st.write(f"You: {content}")
-        else:
-            if isinstance(content, dict):  # SQL and DataFrame response
-                st.write("Bot:")
-                st.code(f"SQL Query:\n{content['query']}", language="sql")  # Display SQL query in code block
-                st.dataframe(content["data"].head())  # Display DataFrame as a table
-            else:
-                st.write(f"Bot: {content}")
-
-# Chat Interface at the bottom
 user_input = st.text_input("You:", key="input")
 
 if user_input:
-    # Append user input to chat history
-    st.session_state.chat_history.append({"role": "user", "content": user_input})
+    # Clear previous user input in chat history, keep only the latest
+    st.session_state.chat_history = [{"role": "user", "content": user_input}]
 
     # Process user input
     sql_queries = process_command(user_input, database_info)
@@ -794,3 +805,17 @@ if user_input:
 
         # Append the SQL query and DataFrame response to chat history
         st.session_state.chat_history.append({"role": "bot", "content": {"query": sql_query, "data": df}})
+
+# Display Chat History
+for entry in st.session_state.chat_history:
+    role, content = entry["role"], entry["content"]
+    if role == "user":
+        # st.write(f"You: {content}")
+        pass
+    else:
+        if isinstance(content, dict):  # SQL and DataFrame response
+            st.write("Bot:")
+            st.code(f"SQL Query:\n{content['query']}", language="sql")  # Display SQL query in code block
+            st.dataframe(content["data"].head())  # Display DataFrame as a table
+        else:
+            st.write(f"Bot: {content}")
