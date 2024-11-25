@@ -51,18 +51,17 @@ def get_mongo_data(db_path, sql_query):
 def process_command(command, database_info):
     if command.startswith('\\'):
         tokens = command.strip().split()
-        cmd = tokens[0][1:]  # Extract command after backslash
+        cmd = tokens[0][1:]  
         query = ""
-        # Iterate over all databases in database_info
         for db_name, db_content in database_info.items():
-            db = db_content  # Get the tables in the database
+            db = db_content  
 
             if cmd == 'explore':
                 queries = []
                 for table_name, table_info in db.items():
                     columns = list(table_info['columns'].keys())
                     columns_str = ', '.join(columns)
-                    query = f"SELECT {columns_str} FROM {table_name} LIMIT 3;"
+                    query = f"SELECT {columns_str} \nFROM {table_name} \nLIMIT 3;"
                     print(f"Database: {db_name}\nGenerated Query for '{table_name}':\n{query}\n")
                     queries.append(query)
                 return queries
@@ -73,14 +72,12 @@ def process_command(command, database_info):
                 columns = list(table_info['columns'].keys())
                 column_name = random.choice(columns)
                 column_type = table_info['columns'][column_name]
-                # Use sample values for condition
                 sample_values = table_info['samples'][column_name]
                 if sample_values:
                     condition_value = random.choice(sample_values)
                     if column_type == 'TEXT':
                         condition_value = f"'{condition_value}'"
                 else:
-                    # Fallback if no sample values are provided
                     if column_type == 'INTEGER':
                         condition_value = random.randint(1, 100)
                     elif column_type == 'REAL':
@@ -91,7 +88,7 @@ def process_command(command, database_info):
                         condition_value = 'NULL'
                 condition = f"{column_name} = {condition_value}"
                 columns_str = ', '.join(columns)
-                query = f"SELECT {columns_str} FROM {table_name} WHERE {condition};"
+                query = f"SELECT {columns_str} \nFROM {table_name} \nWHERE {condition};"
                 print(f"Database: {db_name}\nGenerated Sample Query:\n{query}\n")
 
             elif cmd == 'groupby':
@@ -110,10 +107,9 @@ def process_command(command, database_info):
                 print(f"Database: {db_name}\nGenerated GROUP BY Query:\n{query}\n")
 
             elif cmd == 'join':
-                # Ensure there are at least two tables to join
                 if len(db) < 2:
                     print(f"Database: {db_name}\nNot enough tables to perform a JOIN.\n")
-                    cmd = 'where'  # Fallback to WHERE command
+                    cmd = 'where' 
                 table_names = list(db.keys())
 
                 common_columns = set()
@@ -126,10 +122,9 @@ def process_command(command, database_info):
                     try_count += 1
                     if try_count > 5:
                         print(f"Database: {db_name}\nCould not find common columns to join between '{table1}' and '{table2}'.\n")
-                        cmd = 'where'  # Fallback to WHERE command
+                        cmd = 'where'  
                         break
                 if not common_columns:
-                    # If no common columns, use potential foreign key columns
                     possible_keys = set(table1_info['columns'].keys()) & set(['StudentID', 'CourseID', 'EnrollmentID'])
                     possible_keys &= set(table2_info['columns'].keys())
                     common_columns = possible_keys
@@ -138,7 +133,6 @@ def process_command(command, database_info):
                     continue
                 join_column = random.choice(list(common_columns))
 
-                # Get columns from both tables, prefixing with table names to avoid ambiguity
                 table1_columns = [f"{table1}.{col}" for col in table1_info['columns'].keys()]
                 table2_columns = [f"{table2}.{col}" for col in table2_info['columns'].keys()]
                 columns_str = ', '.join(table1_columns + table2_columns)
@@ -164,7 +158,6 @@ def process_command(command, database_info):
                         condition_value = f"'{condition_value}'"
                     condition = f"{column_name} = {condition_value}"
                 else:
-                    # Fallback if no sample values are provided
                     if column_type == 'INTEGER':
                         condition_value = random.randint(1, 100)
                         condition = f"{column_name} > {condition_value}"
@@ -211,7 +204,7 @@ def process_command(command, database_info):
                 columns.remove(column1)
                 column2 = random.choice(columns)
                 aggregation_function = random.choice(['SUM', 'AVG', 'COUNT', 'MAX', 'MIN'])
-                condition_value = random.randint(1, 100)
+                condition_value = random.randint(1, 10)
                 select_columns = ', '.join([column1, f"{aggregation_function}({column2}) AS {aggregation_function}_{column2}"])
                 query = (
                     f"SELECT {select_columns}\n"
@@ -223,38 +216,34 @@ def process_command(command, database_info):
             
             else:
                 print(f"Unknown command: {cmd}")
-                break  # Exit the loop if command is unknown
-            break  # Exit the loop after processing the command for one database
+                break  
+            break  
         return [query]
     else:
         query = parse_nl_query(command, database_info)
         return [query]
 def tokenize_nl_query(nl_query):
-    # Remove punctuation and split into words
     nl_query = re.sub(r'[^\w\s]', '', nl_query)
     tokens = nl_query.lower().split()
     return tokens
 def format_value(value):
     try:
         float(value)
-        return value  # It's a number
+        return value 
     except ValueError:
-        return f"'{value}'"  # It's a string
+        return f"'{value}'" 
 def parse_condition(condition_tokens, aggregation_function=None, aggregation_field=None):
     condition_str = ' '.join(condition_tokens)
 
-    # Replace natural language operators with SQL operators
     for nl_op in sorted(operator_mapping.keys(), key=lambda x: -len(x)):
         if nl_op in condition_str:
             sql_op = operator_mapping[nl_op]
             condition_str = condition_str.replace(nl_op, sql_op)
-            break  # Assume only one operator per condition
+            break  
 
-    # Replace aggregation function name with SQL function if applicable
     if aggregation_function and aggregation_function.lower() in condition_str:
         condition_str = condition_str.replace(aggregation_function.lower(), f"{aggregation_function}({aggregation_field})")
 
-    # Split the condition into field, operator, and value
     match = re.match(r'([\w()]+)\s*([><=!]+)\s*(.+)', condition_str)
     if match:
         field = match.group(1)
@@ -262,7 +251,7 @@ def parse_condition(condition_tokens, aggregation_function=None, aggregation_fie
         value = format_value(match.group(3).strip())
         return f"{field} {operator} {value}"
     else:
-        return condition_str  # Return as is if parsing fails
+        return condition_str 
 def find_common_columns(table1, table2, database_info):
     columns1 = set(database_info[selected_database][table1]["columns"].keys())
     columns2 = set(database_info[selected_database][table2]["columns"].keys())
@@ -292,7 +281,6 @@ def parse_nl_query(nl_query, database_info):
     fields = []
     aggregation_function = None
     if is_aggregation:
-        # Expecting an aggregation function
         if token_index < len(tokens):
             agg_word = tokens[token_index]
             if agg_word in aggregation_mapping:
@@ -301,13 +289,11 @@ def parse_nl_query(nl_query, database_info):
             else:
                 return f"Error: Unknown aggregation function '{agg_word}'."
 
-            # Expecting 'of'
             if token_index < len(tokens) and tokens[token_index] == 'of':
                 token_index += 1
             else:
                 return "Error: Expected 'of' after aggregation function."
 
-            # Get the field for aggregation
             if token_index < len(tokens):
                 field = tokens[token_index]
                 fields.append(field)
@@ -317,7 +303,6 @@ def parse_nl_query(nl_query, database_info):
         else:
             return "Error: Incomplete aggregation function."
     else:
-        # Non-aggregation: Get fields
         while token_index < len(tokens) and tokens[token_index] not in ['in', 'of']:
             field = tokens[token_index].strip(',')
             fields.append(field)
@@ -384,13 +369,12 @@ def parse_nl_query(nl_query, database_info):
             else:
                 return "Error: Expected 'by' after 'sorted' or 'order'."
 
-    # Construct the SQL query
+    ########### Construct the SQL query ###########
     sql_query_parts = []
 
     # SELECT clause
     select_clause = "SELECT "
     if is_aggregation:
-        # Include an alias for the aggregated field
         select_clause += f"{aggregation_function}({fields[0]}) AS {aggregation_function.lower()}"
     else:
         select_clause += ', '.join(fields)
@@ -407,7 +391,7 @@ def parse_nl_query(nl_query, database_info):
     sql_query_parts.append(select_clause)
     sql_query_parts.append(from_clause)
 
-    # WHERE clause (for non-aggregation or pre-aggregation filtering)
+    # WHERE clause 
     where_clause = None
     having_clause = None
 
@@ -448,13 +432,11 @@ def parse_nl_query(nl_query, database_info):
 
     return sql_query
 def parse_sql_to_mongo(sql_query, database_info):
-    # Remove line breaks and extra spaces
     sql_query = ' '.join(sql_query.strip().split())
 
-    # Initialize pipeline and collection name
     pipeline = []
     collection_name = ''
-    aliases = {}  # Dictionary to track table aliases
+    aliases = {}  
 
     # Extract SELECT and FROM clauses
     select_match = re.search(r"SELECT\s+(.*?)\s+FROM\s+(\w+)(?:\s+AS\s+(\w+))?", sql_query, re.IGNORECASE)
@@ -466,27 +448,21 @@ def parse_sql_to_mongo(sql_query, database_info):
     else:
         raise ValueError("Invalid SQL query: Cannot find SELECT and FROM clauses.")
 
-    # Helper function to clean field names based on their origin
     def clean_field(field):
-        # Remove the alias if it's from the main table
         if field.startswith(f"{main_alias}.") or field.startswith(f"{collection_name}."):
             return field.split('.')[-1]
         return field
 
-    # Helper function to remove alias from fields in aggregation expressions
     def clean_expression(expression):
-        # Strip main table alias from any expression field reference
         return expression.replace(f"{main_alias}.", "").replace(f"{collection_name}.", "")
 
-    # Handle the remaining parts of the query
     rest_of_query = sql_query[select_match.end():].strip()
 
-    # Initialize variables for WHERE, GROUP BY, etc.
     match_conditions = {}
-    project_fields = {'_id': 0}  # Exclude _id by default
+    project_fields = {'_id': 0}  
     sort_fields = {}
     limit_value = None
-    last_alias = main_alias  # Keep track of the last alias for join referencing
+    last_alias = main_alias  
     aggregation_fields = {}
     having_conditions = {}
     join_count = 0
@@ -501,22 +477,19 @@ def parse_sql_to_mongo(sql_query, database_info):
         if not join_match:
             break
 
-        # Extract components of the JOIN clause
         join_type = (join_match.group(1) or '').strip().upper()
         table_name = join_match.group(2)
         alias = (join_match.group(3) or join_match.group(4) or table_name).strip()
         on_condition = join_match.group(5).strip()
         alias = alias or table_name
-        aliases[alias] = table_name  # Store alias-to-table mapping
+        aliases[alias] = table_name  
 
-        # Parse the ON condition fields (e.g., "s.StudentID = e.StudentID")
         left_field, right_field = [f.strip() for f in on_condition.split('=')]
         local_field = clean_field(left_field)
         foreign_field = right_field.split('.')[-1]
         if join_count == 0:
             local_field = local_field.split('.')[-1]
 
-        # Construct the MongoDB `$lookup` stage
         lookup_stage = {
             '$lookup': {
                 'from': table_name,
@@ -527,15 +500,12 @@ def parse_sql_to_mongo(sql_query, database_info):
         }
         pipeline.append(lookup_stage)
 
-        # If INNER JOIN, add `$unwind` stage
         if join_type.upper() == 'INNER' or not join_type:
             pipeline.append({'$unwind': f'${alias}'})
 
-        # Remove processed JOIN from the query
         rest_of_query = rest_of_query[:join_match.start()] + rest_of_query[join_match.end():].strip()
         join_count += 1
 
-    # Extract WHERE clause
     where_match = re.search(r"WHERE\s+(.*?)(\s+GROUP BY|\s+ORDER BY|\s+HAVING|\s*+LIMIT|;|$)", rest_of_query, re.IGNORECASE)
     if where_match:
         where_clause = where_match.group(1)
@@ -544,7 +514,7 @@ def parse_sql_to_mongo(sql_query, database_info):
             match_cond = re.match(r'(\w+\.?\w*)\s*(=|>|<|>=|<=|!=)\s*(.+)', condition)
             if match_cond:
                 field, operator, value = match_cond.groups()
-                field = clean_field(field)  # Remove table prefix
+                field = clean_field(field) 
                 operator_map = {'=': '$eq', '>': '$gt', '<': '$lt', '>=': '$gte', '<=': '$lte', '!=': '$ne'}
                 mongo_operator = operator_map.get(operator)
                 value = value.strip()
@@ -556,12 +526,11 @@ def parse_sql_to_mongo(sql_query, database_info):
                     try:
                         value = float(value) if '.' in value else int(value)
                     except ValueError:
-                        pass  # Keep as string
+                        pass  
                 match_conditions[field] = {mongo_operator: value}
             else:
                 raise ValueError(f"Unable to parse WHERE condition: {condition}")
 
-    # Add match conditions to pipeline
     if match_conditions:
         pipeline.append({'$match': match_conditions})
 
@@ -570,15 +539,13 @@ def parse_sql_to_mongo(sql_query, database_info):
         select_field = select_field.strip()
         agg_match = re.match(r"(SUM|AVG|COUNT|MIN|MAX)\((.*?)\)\s+AS\s+(\w+)", select_field, re.IGNORECASE)
         if agg_match:
-            # Aggregation function handling
             func, col, alias = agg_match.groups()
-            col = clean_field(col)  # Clean the field within aggregation
+            col = clean_field(col)  
             func_map = {'SUM': '$sum', 'AVG': '$avg', 'COUNT': '$sum', 'MIN': '$min', 'MAX': '$max'}
             mongo_func = func_map[func.upper()]
             aggregation_fields[alias] = {mongo_func: f"${col}" if func.upper() != 'COUNT' else 1}
             project_fields[alias] = f"${alias}"
         else:
-            # Direct field selection handling
             clean_select_field = clean_field(select_field)
             clean_select_field_ = clean_select_field.split('.')[1] if '.' in clean_select_field else clean_select_field
             project_fields[clean_select_field_] = f"${clean_select_field}"
@@ -594,7 +561,6 @@ def parse_sql_to_mongo(sql_query, database_info):
             group_stage['$group']['_id'][field] = f"${field}"
             project_fields[field] = f"$_id.{field}"
 
-        # Process aggregation functions in SELECT clause
         for alias, agg_expr in aggregation_fields.items():
             group_stage['$group'][alias] = agg_expr
 
@@ -622,23 +588,20 @@ def parse_sql_to_mongo(sql_query, database_info):
                         try:
                             value = float(value) if '.' in value else int(value)
                         except ValueError:
-                            pass  # Keep as string
+                            pass  
                     having_conditions.append({field: {mongo_operator: value}})
                 else:
                     raise ValueError(f"Unable to parse HAVING condition: {condition}")
 
             if having_conditions:
-                # Combine multiple conditions using $and
                 if len(having_conditions) > 1:
                     pipeline.append({'$match': {'$and': having_conditions}})
                 else:
                     pipeline.append({'$match': having_conditions[0]})
 
-        # Project fields after grouping and having
         pipeline.append({'$project': project_fields})
 
     else:
-        # If no GROUP BY, just project the fields
         pipeline.append({'$project': project_fields})
 
     # Extract ORDER BY clause
@@ -652,7 +615,6 @@ def parse_sql_to_mongo(sql_query, database_info):
         for field in order_by_fields:
             sort_fields[field] = order_direction
 
-    # Add sort fields to pipeline
     if sort_fields:
         pipeline.append({'$sort': sort_fields})
 
@@ -664,12 +626,9 @@ def parse_sql_to_mongo(sql_query, database_info):
 
     return collection_name, pipeline
 def extract_column_names(sql_query):
-    # Regular expression to capture column names and aggregations between SELECT and FROM
-    # Matches columns with optional functions like SUM, COUNT, etc.
     match = re.search(r"SELECT\s+(.*?)\s+FROM", sql_query, re.IGNORECASE)
     if match:
-        columns = match.group(1)  # Get the matched group with column names and aggregations
-        # Split by commas, strip whitespace, and capture any column or function patterns
+        columns = match.group(1)  
         column_names = [col.strip() for col in re.split(r',\s*(?![^(]*\))', columns)]
         return column_names
     else:
@@ -733,7 +692,6 @@ def upload_data_to_db(df, filename, database_type, database_info, sample_size=5)
     # Display the database_info structure
     st.write("Database structure saved:", database_info)
 
-##################################################################################################################################################################
 suggestions = [
     "Find studentid, firstName, lastName of students with studentID equal to 1",
     "Find 10 firstName, lastName of students",
@@ -749,47 +707,42 @@ suggestions = [
     '\\limit',
     '\\having'
 ]
-
+##################################################################################################################################################################
 # Streamlit App Interface
+##################################################################################################################################################################
+
 st.title("Database Chat Query App")
 
-# Step 1: Select Database Type
+# Select Database Type
 database_type = st.radio("Select Database Type:", ("MongoDB", "SQLite"))
 
-# Toggle to show/hide the upload section
 show_upload = st.checkbox("Show Upload Section", value=True)
 
-# Step 2: Upload CSV File (conditionally displayed)
+# Upload CSV File
 if show_upload:
     uploaded_file = st.file_uploader("Upload a CSV file", type="csv")
     if uploaded_file is not None:
-        # Load CSV content into DataFrame
         df = pd.read_csv(uploaded_file)
         st.write("CSV Preview:", df.head())
 
-        # Upload CSV to selected database
-        filename = uploaded_file.name.split(".")[0]  # Use the file name without the extension as the table/collection name
+        filename = uploaded_file.name.split(".")[0]  
         if st.button("Upload Data to Database"):
             upload_data_to_db(df, filename, database_type, database_info)
 
-# Initialize or clear chat history
 if "chat_history" not in st.session_state:
     st.session_state["chat_history"] = []
 
-# Chat Interface
 st.subheader("Chat with the Database")
 
 user_input = st.text_input("You:", key="input")
 
 if user_input:
-    # Clear previous user input in chat history, keep only the latest
+    # keep only the latest chat history
     st.session_state.chat_history = [{"role": "user", "content": user_input}]
 
-    # Process user input
     sql_queries = process_command(user_input, database_info)
     
     for sql_query in sql_queries:
-        # Fetch data from the appropriate database
         if database_type == "SQLite":
             response_data = get_sqlite_data(selected_database, sql_query)
             column_name = extract_column_names(sql_query)
@@ -797,25 +750,22 @@ if user_input:
         elif database_type == "MongoDB":
             response_data = get_mongo_data(selected_database, sql_query)
         
-        # Ensure the data is a DataFrame
         if not isinstance(response_data, pd.DataFrame):
             df = pd.DataFrame([response_data])
         else:
             df = response_data
 
-        # Append the SQL query and DataFrame response to chat history
         st.session_state.chat_history.append({"role": "bot", "content": {"query": sql_query, "data": df}})
 
-# Display Chat History
+# Display chat history
 for entry in st.session_state.chat_history:
     role, content = entry["role"], entry["content"]
     if role == "user":
-        # st.write(f"You: {content}")
         pass
     else:
-        if isinstance(content, dict):  # SQL and DataFrame response
+        if isinstance(content, dict):  
             st.write("Bot:")
-            st.code(f"SQL Query:\n{content['query']}", language="sql")  # Display SQL query in code block
-            st.dataframe(content["data"].head())  # Display DataFrame as a table
+            st.code(f"SQL Query:\n{content['query']}", language="sql")  
+            st.dataframe(content["data"].head()) 
         else:
             st.write(f"Bot: {content}")
