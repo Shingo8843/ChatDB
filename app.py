@@ -45,7 +45,6 @@ def get_mongo_data(db_path, sql_query):
     client = MongoClient('mongodb://localhost:27017/')
     db = client[db_path]
     collection = db[collection_name]
-
     results = collection.aggregate(pipeline)
     return pd.DataFrame(list(results))
 def process_command(command, database_info):
@@ -445,10 +444,14 @@ def parse_sql_to_mongo(sql_query, database_info):
         collection_name = select_match.group(2)
         main_alias = select_match.group(3) or collection_name
         aliases[main_alias] = collection_name
+        print("main alias", aliases[main_alias])
     else:
         raise ValueError("Invalid SQL query: Cannot find SELECT and FROM clauses.")
 
     def clean_field(field):
+        fields = field.split(".")
+        if len(fields) > 2:
+            field = fields[-2] + "." + fields[-1]
         if field.startswith(f"{main_alias}.") or field.startswith(f"{collection_name}."):
             return field.split('.')[-1]
         return field
@@ -501,7 +504,10 @@ def parse_sql_to_mongo(sql_query, database_info):
         pipeline.append(lookup_stage)
 
         if join_type.upper() == 'INNER' or not join_type:
-            pipeline.append({'$unwind': f'${alias}'})
+            pipeline.append({'$unwind': {
+            "path": f"${alias}",
+            "preserveNullAndEmptyArrays": True
+        }})
 
         rest_of_query = rest_of_query[:join_match.start()] + rest_of_query[join_match.end():].strip()
         join_count += 1
@@ -547,8 +553,21 @@ def parse_sql_to_mongo(sql_query, database_info):
             project_fields[alias] = f"${alias}"
         else:
             clean_select_field = clean_field(select_field)
-            clean_select_field_ = clean_select_field.split('.')[1] if '.' in clean_select_field else clean_select_field
-            project_fields[clean_select_field_] = f"${clean_select_field}"
+    
+            # if the field is not from the main collection, add it to the project stage
+            for alias, collection_name in aliases.items():
+                if clean_select_field in database_info[selected_database][collection_name]["columns"]:
+                    alias = collection_name
+                    break
+            # project_fields[clean_select_field] = f"${clean_select_field}"
+            if alias == main_alias:
+                project_fields[clean_select_field] = f"${clean_select_field}"
+            elif "." in clean_select_field:
+                field_name = clean_select_field.split('.')[-1]
+                project_fields[field_name] = f"${clean_select_field}"
+            else:
+                project_fields[clean_select_field] = f"${alias}.{clean_select_field}"
+            print(project_fields, select_field)
 
     # Extract GROUP BY clause
     group_by_match = re.search(r"GROUP BY\s+(.*?)(\s+HAVING|\s+ORDER BY|\s*+LIMIT|;|$)", rest_of_query, re.IGNORECASE)
@@ -592,6 +611,7 @@ def parse_sql_to_mongo(sql_query, database_info):
                     having_conditions.append({field: {mongo_operator: value}})
                 else:
                     raise ValueError(f"Unable to parse HAVING condition: {condition}")
+            print(having_conditions)
 
             if having_conditions:
                 if len(having_conditions) > 1:
@@ -693,11 +713,11 @@ def upload_data_to_db(df, filename, database_type, database_info, sample_size=5)
     st.write("Database structure saved:", database_info)
 
 suggestions = [
-    "Find studentid, firstName, lastName of students with studentID equal to 1",
-    "Find 10 firstName, lastName of students",
-    "Calculate sum of credithours of courses by instructorname",
-    "Find firstName, lastName of students, enrollments with courseid is 101",
-    "Show 5 firstname, lastname of students, enrollments with grade greater than 3.0 sorted by lastName",
+    "Find studentid, firstName, lastName of students with studentID equal to 1", # Where clause
+    "Find 10 firstName, lastName of students", # Limit clause
+    "Calculate sum of credithours of courses by instructorname", # Group By clause
+    "Find firstName, lastName, courseid of students, enrollments", # Join clause
+    "Show 5 firstname, lastname of students, enrollments sorted by lastName", # Order By clause
     '\\explore',
     '\\sample',
     '\\groupby',
@@ -712,7 +732,7 @@ suggestions = [
 ##################################################################################################################################################################
 
 st.title("Database Chat Query App")
-
+# st.markdown("This app allows you to upload a CSV file, interact with a database, and retrieve information using natural language queries.")
 # Select Database Type
 database_type = st.radio("Select Database Type:", ("MongoDB", "SQLite"))
 
@@ -765,7 +785,7 @@ for entry in st.session_state.chat_history:
     else:
         if isinstance(content, dict):  
             st.write("Bot:")
-            st.code(f"SQL Query:\n{content['query']}", language="sql")  
+            st.code(f"{content['query']}", language="sql")  
             st.dataframe(content["data"].head()) 
         else:
             st.write(f"Bot: {content}")
